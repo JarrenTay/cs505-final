@@ -1,12 +1,14 @@
 package cs505pubsubcep.httpcontrollers;
 
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import cs505pubsubcep.CEP.accessRecord;
 import cs505pubsubcep.Launcher;
 
 import javax.inject.Inject;
 import javax.ws.rs.GET;
 import javax.ws.rs.HeaderParam;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
@@ -15,6 +17,10 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Map;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.List;
+
 
 @Path("/api")
 public class API {
@@ -52,7 +58,7 @@ public class API {
             System.out.println("IP: " + remoteIP + " Timestamp: " + access_ts);
 
             Map<String,String> responseMap = new HashMap<>();
-            if(Launcher.cepEngine != null) {
+            if(Launcher.zipEngine != null) {
 
                     responseMap.put("success", Boolean.TRUE.toString());
                     responseMap.put("status_desc","CEP Engine exists");
@@ -67,6 +73,7 @@ public class API {
 
         } catch (Exception ex) {
 
+            System.out.println("CheckCEP EXCEPTION");
             StringWriter sw = new StringWriter();
             ex.printStackTrace(new PrintWriter(sw));
             String exceptionAsString = sw.toString();
@@ -95,7 +102,7 @@ public class API {
             System.out.println("inputEvent: " + inputEvent);
 
             //send input event to CEP
-            Launcher.cepEngine.input(Launcher.inputStreamName, inputEvent);
+            Launcher.zipEngine.input(Launcher.inputStreamName, inputEvent);
 
             //generate a response
             Map<String,String> responseMap = new HashMap<>();
@@ -114,5 +121,159 @@ public class API {
         return Response.ok(responseString).header("Access-Control-Allow-Origin", "*").build();
     }
 
+    @GET
+    @Path("/getteam")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getTeam(@HeaderParam("X-Auth-API-Key") String authKey) {
+        String responseString = "{}";
+        try {
+            String teamName = "Team Jarren";
+	    String teamMemberSids = "12064341";
+	    String appStatusCode = "1";
+            responseString = "{\"team_name\":\"" + teamName + "\",\"team_member_sids\":[\"" + teamMemberSids + "\"],\"app_status_code\":\"" + appStatusCode + "\"}";
 
+        } catch (Exception ex) {
+
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            String exceptionAsString = sw.toString();
+            ex.printStackTrace();
+
+            return Response.status(500).entity(exceptionAsString).build();
+        }
+        return Response.ok(responseString).header("Access-Control-Allow-Origin", "*").build();
+    }
+
+    @GET
+    @Path("/reset")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response reset(@HeaderParam("X-Auth-API-Key") String authKey) {
+        String responseString = "{}";
+        try {
+            String resetStatusCode = "1";
+            responseString = "{\"reset_status_code\":\"" + resetStatusCode + "\"}";
+
+        } catch (Exception ex) {
+
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            String exceptionAsString = sw.toString();
+            ex.printStackTrace();
+
+            return Response.status(500).entity(exceptionAsString).build();
+        }
+        return Response.ok(responseString).header("Access-Control-Allow-Origin", "*").build();
+    }
+
+    @GET
+    @Path("/zipalertlist")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response zipAlertList(@HeaderParam("X-Auth-API-Key") String authKey) {
+        String responseString = "{}";
+        try {
+            Gson gson = new Gson();
+            Type listType = new TypeToken<ArrayList<String>>(){}.getType();
+            responseString = "{\"zip_list\":" + gson.toJson(Launcher.zipList, listType) + "}";
+
+        } catch (Exception ex) {
+
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            String exceptionAsString = sw.toString();
+            ex.printStackTrace();
+
+            return Response.status(500).entity(exceptionAsString).build();
+        }
+        return Response.ok(responseString).header("Access-Control-Allow-Origin", "*").build();
+    }
+
+    @GET
+    @Path("/alertlist")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response alertList(@HeaderParam("X-Auth-API-Key") String authKey) {
+        String responseString = "{}";
+        try {
+            String state_status = "0";
+            if (Launcher.zipList.size() >= 5) {
+                state_status = "1";
+            }
+            responseString = "{\"state_status\":\"" + state_status + "\"}";
+
+        } catch (Exception ex) {
+
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            String exceptionAsString = sw.toString();
+            ex.printStackTrace();
+
+            return Response.status(500).entity(exceptionAsString).build();
+        }
+        return Response.ok(responseString).header("Access-Control-Allow-Origin", "*").build();
+    }
+
+    @GET
+    @Path("/testcount")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response testCount(@HeaderParam("X-Auth-API-Key") String authKey) {
+        String responseString = "{}";
+        try {
+            responseString = "{\"positive_test\":\"" + Launcher.positiveCases + "\",\"negative_cases\":\"" + Launcher.negativeCases + "\"}";
+
+        } catch (Exception ex) {
+
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            String exceptionAsString = sw.toString();
+            ex.printStackTrace();
+
+            return Response.status(500).entity(exceptionAsString).build();
+        }
+        return Response.ok(responseString).header("Access-Control-Allow-Origin", "*").build();
+    }
+
+    @GET
+    @Path("/getpatient/{mrn}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getPatient(@HeaderParam("X-Auth-API-Key") String authKey, @PathParam("mrn") long mrn) {
+        String responseString = "{}";
+        try {
+            String teamName = "Team Jarren";
+	    String teamMemberSids = "12064341";
+	    String appStatusCode = "1";
+            responseString = "{\"team_name\":\"" + teamName + "\",\"team_member_sids\":[\"" + teamMemberSids + "\"],\"app_status_code\":\"" + appStatusCode + "\"}";
+
+        } catch (Exception ex) {
+
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            String exceptionAsString = sw.toString();
+            ex.printStackTrace();
+
+            return Response.status(500).entity(exceptionAsString).build();
+        }
+        return Response.ok(responseString).header("Access-Control-Allow-Origin", "*").build();
+    }
+
+    @GET
+    @Path("/gethospital/{id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response testCount(@HeaderParam("X-Auth-API-Key") String authKey, @PathParam("id") long id) {
+        String responseString = "{}";
+        try {
+            String teamName = "Team Jarren";
+	    String teamMemberSids = "12064341";
+	    String appStatusCode = "1";
+            responseString = "{\"team_name\":\"" + teamName + "\",\"team_member_sids\":[\"" + teamMemberSids + "\"],\"app_status_code\":\"" + appStatusCode + "\"}";
+
+        } catch (Exception ex) {
+
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            String exceptionAsString = sw.toString();
+            ex.printStackTrace();
+
+            return Response.status(500).entity(exceptionAsString).build();
+        }
+        return Response.ok(responseString).header("Access-Control-Allow-Origin", "*").build();
+    }
 }
