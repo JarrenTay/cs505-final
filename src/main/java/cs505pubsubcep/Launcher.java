@@ -1,6 +1,9 @@
 package cs505pubsubcep;
 
 import cs505pubsubcep.CEP.CEPEngine;
+import cs505pubsubcep.CEP.PatientEvent;
+import cs505pubsubcep.CEP.LocationNode;
+import cs505pubsubcep.CEP.HospitalResponse;
 import cs505pubsubcep.Topics.TopicConnector;
 import cs505pubsubcep.httpfilters.AuthenticationFilter;
 import org.glassfish.grizzly.http.server.HttpServer;
@@ -22,6 +25,7 @@ import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Result;
+import org.neo4j.driver.Record;
 import org.neo4j.driver.Transaction;
 import org.neo4j.driver.TransactionWork;
 
@@ -33,11 +37,12 @@ public class Launcher {
     public static final int WEB_PORT = 8088;
     public static String inputStreamName = null;
     public static long accessCount = -1;
-    public static String zipDetailsFilePath = "/home/jta255/finalProject/cs505-pubsub-cep-template/data/kyzipdetails.csv";
-    public static String hospitalsFilePath = "/home/jta255/finalProject/cs505-pubsub-cep-template/data/hospitals.csv";
-    public static String distanceFilePath = "/home/jta255/finalProject/cs505-pubsub-cep-template/data/kyzipdistance.csv";
+    public static String zipDetailsFilePath = "/var/lib/neo4j/myapp/kyzipdetails.csv";
+    public static String hospitalsFilePath = "/var/lib/neo4j/import/hospitals.csv";
+    public static String distanceFilePath = "/var/lib/neo4j/import/kyzipdistance.csv";
     public static Map<String, Integer> zipCodeCases;
-    public static List<String> zipList;
+    public static Map<String, Integer> zipCodeVisited;
+    public static List<String> zipList; 
     public static int positiveCases = 0;
     public static int negativeCases = 0;
 
@@ -45,25 +50,41 @@ public class Launcher {
 
     public static CEPEngine zipEngine = null;
     public static CEPEngine statusEngine = null;
+    public static CEPEngine patientEngine = null;
 
     private static Driver driver;
-    //private static DatabaseManagementService managementService;
-    //public static GraphDatabaseService graphDb;
 
     public static void main(String[] args) throws IOException {
 
         System.out.println("Importing Zip Codes");
 
+        driver = GraphDatabase.driver("bolt://localhost:7687", AuthTokens.basic("neo4j", "cs505pass"));
+
+        resetData();
+
         zipCodeCases = zipToMap(zipDetailsFilePath);
-        zipList = new ArrayList<String> ();
+        zipCodeVisited = zipToMap(zipDetailsFilePath);
+
+        if (!databaseExists()) {
+            addZipLocations(zipDetailsFilePath);
+            System.out.println("finished adding locations");
+            addHospitalNodes(hospitalsFilePath);
+            System.out.println("finished adding hospitals");
+            addZipDistances(distanceFilePath);
+            System.out.println("finished adding distances");
+        } else {
+            System.out.println("dont add db");
+        }
+
 
         System.out.println("Starting CEP...");
+
         //Embedded database initialization
 
         zipEngine = new CEPEngine();
         statusEngine = new CEPEngine();
+        patientEngine = new CEPEngine();
 
-        //START MODIFY
         inputStreamName = "PatientInStream";
         String inputStreamAttributesString = "first_name string, last_name string, mrn string, zip_code string, patient_status_code string";
 
@@ -77,98 +98,36 @@ public class Launcher {
                 "group by zip_code " +
                 "insert into ZipAlertStream; ";
 
-        //END MODIFY
-
         zipEngine.createCEP(inputStreamName, outputStreamName, inputStreamAttributesString, outputStreamAttributesString, rtr1);
 
-        //START MODIFY
         inputStreamName = "PatientInStream";
         inputStreamAttributesString = "first_name string, last_name string, mrn string, zip_code string, patient_status_code string";
 
         outputStreamName = "StatusAlertStream";
         outputStreamAttributesString = "patient_status_code string, count long";
 
-	//CEP query string for alerting if there is a double growth per zipcode
+	//CEP query string for getting positives and negatives
         String rtr2 = " " +
                 "from PatientInStream#window.timeBatch(15 sec) " +
                 "select patient_status_code, count() as count " +
                 "group by patient_status_code " +
                 "insert into StatusAlertStream; ";
 
-        //END MODIFY
-
         statusEngine.createCEP(inputStreamName, outputStreamName, inputStreamAttributesString, outputStreamAttributesString, rtr2);
 
-        driver = GraphDatabase.driver("bolt://localhost:7687", AuthTokens.basic("neo4j", "cs505pass"));
-/*
-        try ( Session session = driver.session() )
-        {
-            String greeting = session.writeTransaction( new TransactionWork<String>()
-            {
-                @Override
-                public String execute( Transaction tx )
-                {
-                    Result result = tx.run( "CREATE (a:Greeting) " +
-                                                     "SET a.message = $message " +
-                                                     "RETURN a.message + ', from node ' + id(a)",
-                            parameters( "message", "Test Message" ) );
-                    return result.single().get( 0 ).asString();
-                }
-            } );
-            System.out.println( greeting );
-        }
-*/
-/*
-        try (Session session = driver.session() ) {
-            session.writeTransaction( tx -> {
-                tx.run ("MATCH (n) DETACH DELETE n");
-                return 1;
-            } );
-        }
+        inputStreamName = "PatientInStream";
+        inputStreamAttributesString = "first_name string, last_name string, mrn string, zip_code string, patient_status_code string";
 
-        addHospitalNodes(hospitalsFilePath, driver);
-        addHospitalRelationships(distanceFilePath, driver);
-*/
-        try (Session session = driver.session()) {
-            session.readTransaction( tx -> {
-                Result result = tx.run ("MATCH (a:Hospital) RETURN a.zip ORDER BY a.zip");
-                while (result.hasNext() ) {
-                    System.out.println( Integer.toString(result.next().get(0).asInt()));
-                }
-                return 1;
-            });
-        }
+        outputStreamName = "PatientOutStream";
+        outputStreamAttributesString = "mrn string, zip_code string, patient_status_code string";
 
-/*
-        managementService = new DatabaseManagementServiceBuilder("/home/jta255/finalProject/hospitalDb");
-        graphDb = managementService.database("HospitalDb");
-        registerShutdownHook(managementService);
-//        var connectionType = RelationshipType.withName("CONNECTS");
-        var startNode;
-        var endNode;
-        var newNode;
-        var relationship;
-        var newRelationship;
-        try (var transaction = database.beginTx()) {
-            startNode = transaction.createNode("Hospital");
-            startNode.setProperty("hospitalId", 11740202);
-            startNode.setProperty("beds", 404);
-            startNode.setProperty("zip", 40202);
-            endNode = transaction.createNode("Hospital");
-            endNode.setProperty("hospitalId", 11640536);
-            endNode.setProperty("beds", 604);
-            endNode.setProperty("zip", 40536);
-            relationship = startNode.createRelationshipTo(endNode, RelTypes.CONNECTED);
-            relationship.setProperty("distance", 55.46403169);
-            transaction.commit();
-        }
-        try (var transaction = database.beginTx()) {
-            newNode = transaction.findNode("Hospital", "hospitalId", 11740202);
-            transaction.commit();
-        }
-        System.out.println("TEST");
-        System.out.println(Integer.toString(newNode.getProperty("beds")));
-*/
+	//CEP query string for getting new patients
+        String of = " " +
+                "from PatientInStream " +
+                "select mrn, zip_code, patient_status_code " +
+                "insert into PatientOutStream; ";
+
+        patientEngine.createCEP(inputStreamName, outputStreamName, inputStreamAttributesString, outputStreamAttributesString, of);
 
         System.out.println("CEP Started...");
 
@@ -221,35 +180,36 @@ public class Launcher {
         } catch (IOException ioe) {
             ioe.printStackTrace();
         }
-        //System.out.println(outMap.toString());
         return outMap;
     }
 
-    private static void addHospitalNodes(String hospitalsFile, Driver driver) {
-        Path pathToFile = Paths.get(hospitalsFile);
-        try (BufferedReader br = Files.newBufferedReader(pathToFile, StandardCharsets.UTF_8)) {
-            String line = br.readLine();
-            line = br.readLine();
-            int count = 0;
-            while (line != null) {
-                String[] attributes = line.split(",");
-                System.out.println(attributes[0]);
-                try (Session session = driver.session() ) { 
-                    session.writeTransaction( tx -> {
-                        tx.run ("CREATE (a:Hospital {hospitalId: $hospitalId, zip: $zip, beds: $beds, level: $level})", parameters("hospitalId", new Integer(attributes[0]), "beds", new Integer(attributes[7]), "zip", new Integer(attributes[5]), "level", attributes[16]));
-                        return 1;
-                    } );
-                }
-                System.out.println(Integer.toString(count));
-                count = count + 1;
-                line = br.readLine();
-            }
-        } catch (IOException ioe) {
-            ioe.printStackTrace();
+    private static void addZipLocations(String zipDetailsFile) {
+        try (Session session = driver.session() ) {
+            session.writeTransaction( tx -> {
+                tx.run ("LOAD CSV WITH HEADERS FROM 'file:///kyzipdetails.csv' AS line CREATE (:Location {zipCode: line.zip})", parameters());
+                return 1;
+            } );
         }
     }
 
-    private static void addHospitalRelationships(String distanceFile, Driver driver) {
+    private static void addHospitalNodes(String hospitalsFile) {
+
+        try (Session session = driver.session() ) { 
+            session.writeTransaction( tx -> {
+                tx.run ("CREATE (:Hospital {hospitalId: \"0\", beds:-1, taken:0, level:\"\", zipCode:\"0\"})", parameters());
+                return 1;
+            } );
+        }
+
+        try (Session session = driver.session() ) { 
+            session.writeTransaction( tx -> {
+                tx.run ("LOAD CSV WITH HEADERS FROM 'file:///hospitals.csv' AS line MATCH (a:Location) WHERE a.zipCode = line.zip CREATE (b:Hospital {hospitalId: line.hospitalId, beds: toInteger(line.beds), taken: 0, level: line.trauma, zipCode: line.zip}),(a)-[:CONTAINS]->(b)", parameters());
+                return 1;
+            } );
+        }
+    }
+
+    private static void addZipDistances(String distanceFile) {
         Path pathToFile = Paths.get(distanceFile);
         try (BufferedReader br = Files.newBufferedReader(pathToFile, StandardCharsets.US_ASCII)) {
             String line = br.readLine();
@@ -257,30 +217,196 @@ public class Launcher {
             int count = 0;
             while (line != null) {
                 String[] attributes = line.split(",");
-                try (Session session = driver.session() ) {
-                    session.writeTransaction( tx -> {
-                        tx.run ("MATCH (a:Hospital),(b:Hospital) WHERE a.zip = $aZip AND b.zip = $bZip CREATE(a)-[r:CONNECTED_TO {distance: $distance}]->(b)", parameters("aZip", attributes[0], "bZip", attributes[1], "distance", attributes[2]));
-                        return 1;
-                    } );
-                }
-                try (Session session = driver.session() ) {
-                    session.writeTransaction( tx -> {
-                        tx.run ("MATCH (a:Hospital),(b:Hospital) WHERE a.zip = $aZip AND b.zip = $bZip CREATE(a)-[r:CONNECTED_TO {distance: $distance}]->(b)", parameters("aZip", new Integer(attributes[1]), "bZip", new Integer(attributes[0]), "distance", new Float(attributes[2])));
-                        return 1;
-                    } );
+                if (Double.parseDouble(attributes[2]) < 25.0) {
+                    String queryString = "MATCH (a:Location),(b:Location) WHERE a.zipCode = '" + attributes[0] + "' AND b.zipCode = '" + attributes[1] + "' CREATE(a)-[:CONNECTED_TO {distance: " + attributes[2] + "}]->(b)";
+                    try (Session session = driver.session() ) {
+                        session.writeTransaction( tx -> {
+                            tx.run (queryString, parameters());
+                            return 1;
+                        } );
+                    }
                 }
                 if (count % 100 == 0) {
                     System.out.println(Integer.toString(count));
-                }
+                }    
                 count = count + 1;
                 line = br.readLine();
+
             }
         } catch (IOException ioe) {
             ioe.printStackTrace();
         }
     }
+
+    public static String checkLocation(String locationZip, String patientStatusCode) {
+        String hid = "";
+        int beds = 0;
+        int taken = 0;
+        String level = "";
+        String out = "";
+        try (Session session = driver.session()) {
+            out = session.readTransaction( tx -> {
+                Result result = tx.run ("MATCH (a:Location)-[r:CONTAINS]-(b:Hospital) WHERE a.zipCode=$zip RETURN b.hospitalId, b.beds, b.taken, b.level", parameters("zip", locationZip));
+                while (result.hasNext() ) {
+                    Record jo = result.next();
+                    if (jo.get("b.beds").asInt() != jo.get("b.taken").asInt()) {
+                        if ((patientStatusCode.equals("6") && !jo.get("b.level").asString().equals("NOT AVAILABLE")) || !patientStatusCode.equals("6")) {
+                            return(jo.get("b.hospitalId").asString());
+                        }
+                    }
+
+                }
+                return "";
+            });
+        }
+        return out; 
+    }
+
+    public static void createPatientNode(String hospital, String mrn) {
+
+        try (Session session = driver.session() ) {
+            session.writeTransaction( tx -> {
+                tx.run ("MATCH (a:Hospital) WHERE a.hospitalId = $hid SET a.taken = a.taken + 1 CREATE (b:Patient {mrn: $mrn }), (a)-[r:SERVES]->(b)", parameters("hid", hospital, "mrn", mrn));
+                return 1;
+            });
+        } 
+
+    }
+
+    public static void addToQueue(PriorityQueue<LocationNode> queue, Double distance, String zip) {
+        try (Session session = driver.session()) {
+            session.readTransaction( tx -> {
+                Result result = tx.run ("MATCH (a:Location)-[r:CONNECTED_TO]-(b:Location) WHERE a.zipCode=$zip RETURN b.zipCode, r.distance ORDER BY r.distance LIMIT 5", parameters("zip", zip));
+                while (result.hasNext() ) {
+                    Record jo = result.next();
+                    String newZip = jo.get("b.zipCode").asString();
+                    if (zipCodeVisited.get(newZip) != 1) {
+                        zipCodeVisited.put(newZip, 1);
+                        queue.add(new LocationNode(newZip, distance + jo.get("r.distance").asDouble()));
+                    }
+                }
+                return 1;
+            });
+        }           
+    }
+
+    public static void createPatient(PatientEvent newPatient) {
+
+        if (newPatient.patient_status_code.equals("0") || newPatient.patient_status_code.equals("1") || newPatient.patient_status_code.equals("2") || newPatient.patient_status_code.equals("4")) {
+
+            try (Session session = driver.session() ) {
+                session.writeTransaction( tx -> {
+                    tx.run ("MATCH (a:Hospital) WHERE a.hospitalId = \"0\" CREATE (b:Patient {mrn: $mrn }), (a)-[r:SERVES]->(b)", parameters("mrn", newPatient.mrn));
+                    return 1;
+                });
+            }           
+
+            System.out.println("Put new patient with trauma " + newPatient.patient_status_code + " at 0");
+        } else {
+            for (Map.Entry<String, Integer> entry : zipCodeVisited.entrySet()) {
+                zipCodeVisited.put(entry.getKey(), 0);
+            }
+
+            PriorityQueue<LocationNode> queue = new PriorityQueue<LocationNode>();
+            queue.add(new LocationNode(newPatient.zip_code, 0.0));
+            zipCodeVisited.put(newPatient.zip_code, 1);
+            LocationNode currNode = new LocationNode("", 0.0);
+            boolean nodeAdded = false;
+            String goodHospital = "";
+
+            while (queue.size() != 0) {
+                currNode = queue.poll();
+                goodHospital = checkLocation(currNode.zip, newPatient.patient_status_code);
+                if (goodHospital != "") {
+                    createPatientNode(goodHospital, newPatient.mrn);
+                    nodeAdded = true;
+                    break;
+                }
+                addToQueue(queue, currNode.distance, currNode.zip);
+            }
+            if (nodeAdded == true) {
+                System.out.println("Put new patient with trauma " + newPatient.patient_status_code + " at " + currNode.zip);
+            } else {
+                System.out.println("COULD NOT PLACE PATIENT WITH TRAUMA" + newPatient.patient_status_code + " from " + newPatient.zip_code);
+            }
+        }
+    }
+
+    public static PatientEvent getPatient(String mrn) {
+        PatientEvent patient;
+        try (Session session = driver.session()) {
+            patient = session.readTransaction( tx -> {
+                Result result = tx.run ("MATCH (a:Hospital)-[SERVES]-(b:Patient) WHERE b.mrn=$mrn RETURN a.hospitalId", parameters("mrn", mrn));
+                PatientEvent outPatient = new PatientEvent();
+                outPatient.mrn = mrn;
+                outPatient.zip_code = "-1";
+                while (result.hasNext() ) {
+                    Record jo = result.next();
+                    outPatient.zip_code = jo.get("a.hospitalId").asString();
+                }
+                return outPatient;
+            });
+        }
+        return patient;
+    }
+
+    public static HospitalResponse getHospital(String hid) {
+        HospitalResponse hr;
+        try (Session session = driver.session()) {
+            hr = session.readTransaction( tx -> {
+                Result result = tx.run ("MATCH (a:Hospital) WHERE a.hospitalId=$hid RETURN a.beds, a.taken, a.zipCode", parameters("hid", hid));
+                HospitalResponse outHr = new HospitalResponse();
+
+                while (result.hasNext() ) {
+                    Record jo = result.next();
+                    outHr.totalBeds = Integer.toString(jo.get("a.beds").asInt());
+                    int availableBeds = Integer.parseInt(outHr.totalBeds) - jo.get("a.taken").asInt();
+                    outHr.avalableBeds = Integer.toString(availableBeds);
+                    outHr.zipCode = jo.get("a.zipCode").asString();
+                }
+                return outHr;
+            });
+        }
+        return hr;
+    }
+
+    public static boolean databaseExists() {
+        boolean out = false;
+        try (Session session = driver.session()) {
+            out = session.readTransaction( tx -> {
+                Result result = tx.run ("MATCH (n) RETURN n");
+                while (result.hasNext() ) {
+                    return true;
+                }
+                return false;
+            });
+        }
+        return out; 
+    }
+
+    public static void resetData() {
+
+        zipCodeCases = zipToMap(zipDetailsFilePath);
+        zipCodeVisited = zipToMap(zipDetailsFilePath);
+        accessCount = -1;
+        if (zipList != null) {
+            zipList.removeAll(zipList); 
+        }
+        positiveCases = 0;
+        negativeCases = 0;
+
+        try (Session session = driver.session() ) {
+            session.writeTransaction( tx -> {
+                tx.run ("MATCH (n:Patient) DETACH DELETE n");
+                return 1;
+            } );
+        }
+        try (Session session = driver.session() ) {
+            session.writeTransaction( tx -> {
+                tx.run ("MATCH (n:Hospital) SET n.taken = 0");
+                return 1;
+            } );
+        }
+    }
+
 }
-/*
-public class CEPQuery {
-    public static List<Map<String, Map<String, String>>> zipList;
-}*/

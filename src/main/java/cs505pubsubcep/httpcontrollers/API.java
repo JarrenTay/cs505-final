@@ -3,6 +3,8 @@ package cs505pubsubcep.httpcontrollers;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import cs505pubsubcep.CEP.accessRecord;
+import cs505pubsubcep.CEP.PatientEvent;
+import cs505pubsubcep.CEP.HospitalResponse;
 import cs505pubsubcep.Launcher;
 
 import javax.inject.Inject;
@@ -150,6 +152,7 @@ public class API {
     public Response reset(@HeaderParam("X-Auth-API-Key") String authKey) {
         String responseString = "{}";
         try {
+            Launcher.resetData();
             String resetStatusCode = "1";
             responseString = "{\"reset_status_code\":\"" + resetStatusCode + "\"}";
 
@@ -234,13 +237,11 @@ public class API {
     @GET
     @Path("/getpatient/{mrn}")
     @Produces(MediaType.APPLICATION_JSON)
-    public Response getPatient(@HeaderParam("X-Auth-API-Key") String authKey, @PathParam("mrn") long mrn) {
+    public Response getPatient(@HeaderParam("X-Auth-API-Key") String authKey, @PathParam("mrn") String mrn) {
         String responseString = "{}";
         try {
-            String teamName = "Team Jarren";
-	    String teamMemberSids = "12064341";
-	    String appStatusCode = "1";
-            responseString = "{\"team_name\":\"" + teamName + "\",\"team_member_sids\":[\"" + teamMemberSids + "\"],\"app_status_code\":\"" + appStatusCode + "\"}";
+            PatientEvent patient = Launcher.getPatient(mrn);
+            responseString = "{\"mrn\":\"" + patient.mrn + "\",\"location_code\":\"" + patient.zip_code + "\"}";
 
         } catch (Exception ex) {
 
@@ -257,13 +258,11 @@ public class API {
     @GET
     @Path("/gethospital/{id}")
     @Produces(MediaType.APPLICATION_JSON)
-    public Response testCount(@HeaderParam("X-Auth-API-Key") String authKey, @PathParam("id") long id) {
+    public Response testCount(@HeaderParam("X-Auth-API-Key") String authKey, @PathParam("id") String id) {
         String responseString = "{}";
         try {
-            String teamName = "Team Jarren";
-	    String teamMemberSids = "12064341";
-	    String appStatusCode = "1";
-            responseString = "{\"team_name\":\"" + teamName + "\",\"team_member_sids\":[\"" + teamMemberSids + "\"],\"app_status_code\":\"" + appStatusCode + "\"}";
+            HospitalResponse hr = Launcher.getHospital(id);
+            responseString = "{\"total_beds\":\"" + hr.totalBeds + "\",\"avalable_beds\":\"" + hr.avalableBeds + "\",\"zipcode\":\"" + hr.zipCode + "\"}";
 
         } catch (Exception ex) {
 

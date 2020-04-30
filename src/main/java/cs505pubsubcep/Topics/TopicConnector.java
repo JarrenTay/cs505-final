@@ -60,6 +60,7 @@ public class TopicConnector {
                     //System.out.println("INPUT CEP EVENT: " +  map);
                     Launcher.zipEngine.input(Launcher.inputStreamName, gson.toJson(map));
                     Launcher.statusEngine.input(Launcher.inputStreamName, gson.toJson(map));
+                    Launcher.patientEngine.input(Launcher.inputStreamName, gson.toJson(map));
 
                 }
                 //System.out.println("");

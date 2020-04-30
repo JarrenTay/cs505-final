@@ -73,13 +73,14 @@ public class OutputSubscriber implements InMemoryBroker.Subscriber {
                             break;
                         default:
                     }
-                }
-            }
-            //System.out.println("yesses: " + Integer.toString(yesses) + " nos: " + Integer.toString(nos));
-            //String[] sstr = String.valueOf(msg).split(":");
-            //String[] outval = sstr[2].split("}");
-            //Launcher.accessCount = Long.parseLong(outval[0]);
+                } 
+            } else if (this.streamName == "PatientOutStream") {
+                Gson gson = new Gson();
+                PatientQuery patientList = gson.fromJson(msg.toString(), PatientQuery.class);
 
+                Launcher.createPatient(patientList.event);
+                
+            }
         } catch(Exception ex) {
             ex.printStackTrace();
         }
